@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Pantaleon · Supervisión</title>
+  <title>Pantaleón · Supervisión / Modo Administrador</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
     body{font-family:Arial, sans-serif;background:#f5f7f6;margin:0;padding:20px;}
@@ -13,15 +13,20 @@
     th,td{border:1px solid #ddd;padding:8px;text-align:center;}
     th{background:#c44f11;color:white;}
     tr:nth-child(even){background:#f2f2f2;}
+    #adminSection{display:none;}
   </style>
 </head>
 <body>
-  <h1>Pantaleón · Área de Supervisión</h1>
+  <h1>Pantaleón · Sistema</h1>
   <nav>
-    <button onclick="mostrarSupervision()">Supervisión</button>
+    <button onclick="activarAdmin()">Administrador</button>
   </nav>
 
-  <div id="contenido"></div>
+  <div id="contenido">
+    <p>Bienvenido al sistema. Usa el botón Administrador para acceder al modo de supervisión de costos.</p>
+  </div>
+
+  <div id="adminSection"></div>
 
   <script>
     async function cargarCSV(ruta){
@@ -36,7 +41,16 @@
       });
     }
 
-    async function mostrarSupervision(){
+    async function activarAdmin(){
+      const clave = prompt("Ingrese la contraseña de administrador:");
+      if(clave !== "admin123"){
+        alert("Contraseña incorrecta.");
+        return;
+      }
+      mostrarAdmin();
+    }
+
+    async function mostrarAdmin(){
       const equipos = await cargarCSV('equipos.csv');
       const costos = await cargarCSV('costos.csv');
 
@@ -45,10 +59,10 @@
       costos.forEach(c=>{
         if(!gastos[c.No_SAP]) gastos[c.No_SAP] = {total:0,ultimo:""};
         gastos[c.No_SAP].total += c.Costo_Componente;
-        gastos[c.No_SAP].ultimo = `${c.Componente} (${c.Fecha})`;
+        gastos[c.No_SAP].ultimo = `${c.Componente} (${c.Costo_Componente} USD – ${c.Fecha})`;
       });
 
-      let html = `<table><tr>
+      let html = `<h2>Modo Administrador</h2><table><tr>
         <th>No SAP</th><th>Equipo</th><th>Valor Reemplazo ($)</th>
         <th>Gasto Anual ($)</th><th>%RAV</th><th>Último Componente Cambiado</th>
       </tr>`;
@@ -67,7 +81,8 @@
       });
 
       html += "</table>";
-      document.getElementById('contenido').innerHTML = html;
+      document.getElementById('adminSection').innerHTML = html;
+      document.getElementById('adminSection').style.display = "block";
     }
   </script>
 </body>
