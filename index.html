@@ -2,88 +2,360 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Pantaleón · Supervisión / Modo Administrador</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pantaleon · Consulta de Equipos</title>
   <style>
-    body{font-family:Arial, sans-serif;background:#f5f7f6;margin:0;padding:20px;}
-    h1{color:#c44f11;}
-    nav{margin-bottom:20px;}
-    button{margin-right:10px;padding:8px 14px;border:none;border-radius:6px;cursor:pointer;background:#f26a21;color:white;}
-    table{border-collapse:collapse;width:100%;margin-top:20px;}
-    th,td{border:1px solid #ddd;padding:8px;text-align:center;}
-    th{background:#c44f11;color:white;}
-    tr:nth-child(even){background:#f2f2f2;}
-    #adminSection{display:none;}
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7f6; color: #333; }
+    .header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; background: white; padding: 15px 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); gap: 20px; }
+    .logo img { height: 120px; }
+    .area { text-align: center; font-size: 26px; font-weight: bold; color: #f26a21; }
+    .meta { text-align: right; font-size: 14px; }
+    .btn { margin: 5px 0; padding: 7px 14px; background: #f26a21; border: none; border-radius: 6px; color: white; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; transition: all 0.2s ease-in-out; }
+    .btn:hover { background: #c44f11; transform: scale(1.05); }
+    .search-box { display: flex; justify-content: center; margin: 20px auto; gap: 10px; flex-wrap: wrap; }
+    .search-box input { width: 220px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    .contador { text-align: center; margin: 10px auto; font-weight: bold; color: #333; }
+    .resultados { margin: 20px auto; max-width: 1000px; }
+    .item { background: white; margin: 20px auto; padding: 15px; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 900px; }
+    .item strong { color: #f26a21; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: center; font-size: 14px; }
+    th { background: #f26a21; color: white; }
+    .docs { margin-top: 10px; }
+    .docs-title { font-weight: bold; margin-bottom: 5px; }
+    .docs-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    #lectorQR { margin: 20px auto; width: 300px; display: none; }
   </style>
 </head>
 <body>
-  <h1>Pantaleón · Sistema</h1>
-  <nav>
-    <button onclick="activarAdmin()">Administrador</button>
-  </nav>
+  <header class="header">
+    <div class="logo"><img src="logo.png" alt="Pantaleon Logo"></div>
+    <div class="area">EXTRACCIÓN DE JUGO</div>
+    <div class="meta">
+      <div id="fecha-hora"></div>
+      <div>Responsable: <strong id="responsable"></strong></div>
+      <button class="btn" onclick="cambiarResponsable()">Cambiar Responsable</button>
+      <button class="btn" onclick="mostrarSupervision()">Supervisión</button>
+    </div>
+  </header>
 
-  <div id="contenido">
-    <p>Bienvenido al sistema. Usa el botón Administrador para acceder al modo de supervisión de costos.</p>
+  <div class="search-box">
+    <input type="text" id="buscarSAP" placeholder="Buscar por Código SAP">
+    <button class="btn" onclick="abrirQR()">📷 Escanear QR</button>
+    <input type="text" id="buscarNombre" placeholder="Buscar por Nombre de Equipo">
   </div>
 
-  <div id="adminSection"></div>
+  <div id="lectorQR"></div>
+  <div class="contador" id="contador">
+  </div>
+  <!-- Vista de Supervisión (oculta por defecto) -->
+  <div class="resultados" id="supervision" style="display:none;"></div>
+  <div class="contador" id="contador_placeholder" style="display:none;"></div>
+  <!-- /Vista Supervisión -->
+  <div class="contador" id="contador"</div>
+  <div class="resultados" id="resultados"></div>
 
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script>
-    async function cargarCSV(ruta){
-      return new Promise((resolve,reject)=>{
-        Papa.parse(ruta,{
-          download:true,
-          header:true,
-          dynamicTyping:true,
-          complete:(res)=>resolve(res.data),
-          error:(err)=>reject(err)
-        });
-      });
+    let datosEquipos = [];
+    let datosBombas = [];
+
+    // Mapeo de documentos por SAP
+    const documentosPorSAP = {
+      "109304": ["GOULDS ST.pdf"],
+      "109305": ["GOULDS ST.pdf"],
+      "132007": ["GOULDS JC.pdf"],
+      "132008": ["GOULDS JC.pdf"],
+      "121810": ["GOULDS 3196.pdf", "GOULDS 3198.pdf", "CURVA 3196.pdf"],
+      "109182": ["GOULDS 3196.pdf", "GOULDS 3198.pdf", "CURVA 3196.pdf"],
+      "137332": ["GOULDS 3196.pdf", "GOULDS 3198.pdf", "CURVA 3196.pdf"],
+      "137330": ["GOULDS 3196.pdf", "GOULDS 3198.pdf", "CURVA 3196.pdf"],
+      "137331": ["GOULDS 3196.pdf", "GOULDS 3198.pdf", "CURVA 3196.pdf"],
+      "126994": ["B_HS.pdf", "IOM_HS.pdf"],
+      "121815": ["B_HS.pdf", "IOM_HS.pdf"],
+      "121812": ["B_HS.pdf", "IOM_HS.pdf"],
+      "126992": ["B_HS.pdf", "IOM_HS.pdf"],
+      "126995": ["B_HS.pdf", "IOM_HS.pdf"],
+      "126993": ["B_HS.pdf", "IOM_HS.pdf"],
+      "131908": ["HELIMAX.pdf", "HELIMAXMANUAL.pdf"],
+      "131909": ["HELIMAX.pdf", "HELIMAXMANUAL.pdf"],
+      "131995": ["HELIMAX.pdf", "HELIMAXMANUAL.pdf"],
+      "112857": ["FALK FZ3A.pdf", "FALK.pdf"],
+      "112860": ["FALK FZ3A.pdf", "FALK.pdf"],
+      "112864": ["FALK FZ3A.pdf", "FALK.pdf"],
+      "112457": ["FALK FZ3A.pdf", "FALK.pdf"],
+      "131792": ["FALK FZ3A.pdf", "FALK.pdf"],
+      "109039": ["FALK FC2.pdf"],
+      "109303": ["GOULDS STX.pdf"]
+    };
+
+    function normalizarClaves(obj) {
+      const nuevo = {};
+      for (let key in obj) {
+        let k = key.trim().toLowerCase();
+        k = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        nuevo[k] = obj[key];
+      }
+      return nuevo;
     }
 
-    async function activarAdmin(){
-      const clave = prompt("Ingrese la contraseña de administrador:");
-      if(clave !== "admin123"){
-        alert("Contraseña incorrecta.");
+    function normalizarSAP(valor) {
+      if (!valor) return "";
+      return String(parseInt(valor)).trim();
+    }
+
+    Papa.parse("equipos.csv", {
+      download: true,
+      header: true,
+      delimiter: ",",
+      complete: function(results) {
+        datosEquipos = results.data.map(normalizarClaves);
+      }
+    });
+
+    Papa.parse("componentes.csv", {
+      download: true,
+      header: true,
+      delimiter: ",",
+      complete: function(results) {
+        datosBombas = results.data.map(normalizarClaves);
+      }
+    });
+
+    function mostrarResultados(datos) {
+      const contenedor = document.getElementById("resultados");
+      const contador = document.getElementById("contador");
+      contenedor.innerHTML = "";
+      contador.innerHTML = "";
+
+      if (datos.length === 0) {
+        contador.innerHTML = "No se encontraron equipos";
         return;
       }
-      mostrarAdmin();
+
+      contador.innerHTML = "Se encontraron " + datos.length + " equipo(s)";
+
+      datos.forEach(item => {
+        const div = document.createElement("div");
+        div.classList.add("item");
+        div.innerHTML = `
+          <strong>Ubicación Técnica:</strong> ${item["ubicacion tecnica"] || ""}<br>
+          <strong>Código SAP:</strong> ${item["codigo sap"] || ""}<br>
+          <strong>Nombre del Equipo:</strong> ${item["nombre del equipo"] || ""}
+        `;
+
+        const sap = normalizarSAP(item["codigo sap"]);
+        const relacionados = datosBombas.filter(c => normalizarSAP(c["codigo sap"]) === sap);
+
+        if (relacionados.length > 0) {
+          div.innerHTML += `<p><strong>Componentes encontrados: ${relacionados.length}</strong></p>`;
+          let tabla = `<table>
+            <thead>
+              <tr>
+                <th>Componente</th>
+                <th>Características</th>
+                <th>Marca</th>
+                <th>Código Repuesto</th>
+                <th>Descripción</th>
+                <th>Posición</th>
+                <th>Año</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+          relacionados.forEach(c => {
+            tabla += `<tr>
+              <td>${c["componente"] || ""}</td>
+              <td>${c["caracteristicas"] || ""}</td>
+              <td>${c["marca"] || ""}</td>
+              <td>${c["codigo de repuesto"] || ""}</td>
+              <td>${c["descripcion"] || ""}</td>
+              <td>${c["posicion"] || ""}</td>
+              <td>${c["ano"] || ""}</td>
+            </tr>`;
+          });
+
+          tabla += `</tbody></table>`;
+          div.innerHTML += tabla;
+        }
+
+        if (documentosPorSAP[sap]) {
+          let docsHTML = `<div class="docs"><div class="docs-title">📂 Documentos Técnicos:</div><div class="docs-buttons">`;
+          documentosPorSAP[sap].forEach(doc => {
+            const nombreLimpio = doc.replace(".pdf", "");
+            docsHTML += `<a href="docs/${doc}" target="_blank" class="btn">📄 Consulta ${nombreLimpio}</a>`;
+          });
+          docsHTML += `</div></div>`;
+          div.innerHTML += docsHTML;
+        }
+
+        contenedor.appendChild(div);
+      });
     }
 
-    async function mostrarAdmin(){
-      const equipos = await cargarCSV('equipos.csv');
-      const costos = await cargarCSV('costos.csv');
+    function filtrar() {
+      const sap = document.getElementById("buscarSAP").value.toLowerCase();
+      const nombre = document.getElementById("buscarNombre").value.toLowerCase();
+      if (sap === "" && nombre === "") {
+        document.getElementById("resultados").innerHTML = "";
+        document.getElementById("contador").innerHTML = "";
+        return;
+      }
+      const filtrados = datosEquipos.filter(item => 
+        (sap === "" || (String(item["codigo sap"])+"").toLowerCase().includes(sap)) &&
+        (nombre === "" || (item["nombre del equipo"] || "").toLowerCase().includes(nombre))
+      );
+      mostrarResultados(filtrados);
+    }
 
-      // agrupar costos por equipo
-      const gastos = {};
-      costos.forEach(c=>{
-        if(!gastos[c.No_SAP]) gastos[c.No_SAP] = {total:0,ultimo:""};
-        gastos[c.No_SAP].total += c.Costo_Componente;
-        gastos[c.No_SAP].ultimo = `${c.Componente} (${c.Costo_Componente} USD – ${c.Fecha})`;
+    function actualizarFechaHora() {
+      const ahora = new Date();
+      const opciones = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second:'2-digit' };
+      document.getElementById("fecha-hora").innerText = ahora.toLocaleDateString("es-ES", opciones);
+    }
+
+    function cambiarResponsable() {
+      const nuevo = prompt("Ingrese el nuevo responsable:");
+      if (nuevo) {
+        document.getElementById("responsable").innerText = nuevo;
+        localStorage.setItem("responsable", nuevo);
+      }
+    }
+
+    function abrirQR() {
+      document.getElementById("lectorQR").style.display = "block";
+      const html5QrCode = new Html5Qrcode("lectorQR");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          document.getElementById("buscarSAP").value = qrCodeMessage;
+          filtrar();
+          html5QrCode.stop();
+          document.getElementById("lectorQR").style.display = "none";
+        },
+        errorMessage => {}
+      ).catch(err => { console.error("Error al iniciar QR: ", err); });
+    }
+
+    
+    async function mostrarSupervision(){
+      // ocultar vista de consulta
+      const resultados = document.getElementById("resultados");
+      const contador = document.getElementById("contador");
+      const searchBox = document.querySelector(".search-box");
+      if (resultados) resultados.style.display = "none";
+      if (contador) contador.style.display = "none";
+      if (searchBox) searchBox.style.display = "none";
+
+      // cargar costos y valores
+      const costos = await new Promise((resolve,reject)=>{
+        Papa.parse("costos.csv", { download:true, header:true, complete: res => resolve(res.data.map(normalizarClaves)), error: reject });
+      });
+      const valores = await new Promise((resolve,reject)=>{
+        Papa.parse("valores_equipo.csv", { download:true, header:true, complete: res => resolve(res.data.map(normalizarClaves)), error: reject });
       });
 
-      let html = `<h2>Modo Administrador</h2><table><tr>
-        <th>No SAP</th><th>Equipo</th><th>Valor Reemplazo ($)</th>
-        <th>Gasto Anual ($)</th><th>%RAV</th><th>Último Componente Cambiado</th>
-      </tr>`;
+      // agrupar costos por SAP
+      const porSAP = {};
+      costos.forEach(row => {
+        const sap = normalizarSAP(row["codigo sap"]);
+        if(!porSAP[sap]) porSAP[sap] = {detalles:[], total:0};
+        const costo = parseFloat(row["costo_usd"]||0) || 0;
+        porSAP[sap].detalles.push(row);
+        porSAP[sap].total += costo;
+      });
 
-      equipos.forEach(eq=>{
-        const g = gastos[eq.No_SAP]||{total:0,ultimo:""};
-        const perc = eq.Costo_Equipo? ((g.total/eq.Costo_Equipo)*100).toFixed(1)+"%" : "0%";
-        html += `<tr>
-          <td>${eq.No_SAP}</td>
-          <td>${eq.Equipo}</td>
-          <td>${eq.Costo_Equipo}</td>
-          <td>${g.total}</td>
-          <td>${perc}</td>
-          <td>${g.ultimo}</td>
+      // map de valores
+      const valorMap = {};
+      valores.forEach(v => {
+        const sap = normalizarSAP(v["codigo sap"]);
+        valorMap[sap] = parseFloat(v["valor_equipo_usd"]||0) || 0;
+      });
+
+      // construir HTML
+      let htmlSup = `<div class="item"><strong>Supervisión de Costos</strong>
+        <div style="margin-top:8px;">
+          <button class="btn" onclick="mostrarConsulta()">← Volver a Consulta</button>
+        </div>
+      </div>`;
+
+      // Resumen por equipo
+      htmlSup += `<div class="item"><strong>Resumen por Equipo</strong>
+        <table>
+          <thead><tr>
+            <th>Código SAP</th><th>Equipo</th><th>Valor Equipo (USD)</th><th>Total Gastado (USD)</th>
+          </tr></thead><tbody>`;
+
+      // necesitamos nombre de equipo desde datosEquipos si está cargado
+      const nombrePorSAP = {};
+      if (Array.isArray(datosEquipos)) {
+        datosEquipos.forEach(e => {
+          const sap = normalizarSAP(e["codigo sap"]);
+          nombrePorSAP[sap] = e["nombre del equipo"] || "";
+        });
+      }
+
+      Object.keys(porSAP).forEach(sap => {
+        const val = valorMap[sap] || 0;
+        const total = porSAP[sap].total || 0;
+        const nombre = nombrePorSAP[sap] || (porSAP[sap].detalles[0]?.["nombre del equipo"] || "");
+        htmlSup += `<tr>
+          <td>${sap}</td>
+          <td>${nombre}</td>
+          <td>${val.toLocaleString("en-US",{maximumFractionDigits:0})}</td>
+          <td>${total.toLocaleString("en-US",{maximumFractionDigits:2})}</td>
+        </tr>`;
+      });
+      htmlSup += `</tbody></table></div>`;
+
+      // Detalle por componente
+      htmlSup += `<div class="item"><strong>Costos Detallados por Componente</strong>
+        <table>
+          <thead><tr>
+            <th>Código SAP</th><th>Equipo</th><th>Componente</th><th>Costo (USD)</th><th>Fecha</th>
+          </tr></thead><tbody>`;
+
+      costos.forEach(r => {
+        const sap = normalizarSAP(r["codigo sap"]);
+        const nombre = r["nombre del equipo"] || nombrePorSAP[sap] || "";
+        const costo = parseFloat(r["costo_usd"]||0) || 0;
+        htmlSup += `<tr>
+          <td>${sap}</td>
+          <td>${nombre}</td>
+          <td>${r["componente"]||""}</td>
+          <td>${costo.toLocaleString("en-US",{maximumFractionDigits:2})}</td>
+          <td>${r["fecha"]||""}</td>
         </tr>`;
       });
 
-      html += "</table>";
-      document.getElementById('adminSection').innerHTML = html;
-      document.getElementById('adminSection').style.display = "block";
+      htmlSup += `</tbody></table></div>`;
+
+      const supDiv = document.getElementById("supervision");
+      supDiv.innerHTML = htmlSup;
+      supDiv.style.display = "block";
     }
+
+    function mostrarConsulta(){
+      const resultados = document.getElementById("resultados");
+      const contador = document.getElementById("contador");
+      const searchBox = document.querySelector(".search-box");
+      const supDiv = document.getElementById("supervision");
+      if (supDiv) supDiv.style.display = "none";
+      if (resultados) resultados.style.display = "block";
+      if (contador) contador.style.display = "block";
+      if (searchBox) searchBox.style.display = "flex";
+    }
+
+    window.onload = () => {
+      document.getElementById("buscarSAP").addEventListener("input", filtrar);
+      document.getElementById("buscarNombre").addEventListener("input", filtrar);
+      const guardado = localStorage.getItem("responsable");
+      if (guardado) document.getElementById("responsable").innerText = guardado;
+      setInterval(actualizarFechaHora, 1000);
+      actualizarFechaHora();
+    };
   </script>
 </body>
 </html>
